@@ -1,0 +1,11 @@
+../Flash/flash_driver.cpp:5:1:FlashDriver::FlashDriver(uint32_t, uint32_t, uint32_t, std::size_t)	1
+../Flash/flash_driver.cpp:15:13:FlashStatus FlashDriver::initialize()	4
+../Flash/flash_driver.cpp:26:13:FlashStatus FlashDriver::erase()	6
+../Flash/flash_driver.cpp:85:13:FlashStatus FlashDriver::write(uint32_t, const uint8_t*, std::size_t)	9
+../Flash/flash_driver.cpp:137:13:FlashStatus FlashDriver::read(uint32_t, uint8_t*, std::size_t) const	5
+../Flash/flash_driver.cpp:163:13:FlashStatus FlashDriver::programWord(uint32_t, const uint8_t*)	5
+../Flash/flash_driver.cpp:197:13:FlashStatus FlashDriver::verify(uint32_t, const uint8_t*, std::size_t) const	3
+../Flash/flash_driver.cpp:210:6:bool FlashDriver::isErased(uint32_t, std::size_t) const	4
+../Flash/flash_driver.cpp:228:6:bool FlashDriver::isFlashWordAligned(uint32_t) const	1
+../Flash/flash_driver.cpp:233:6:bool FlashDriver::isRangeValid(uint32_t, std::size_t) const	3
+../Flash/flash_driver.cpp:244:13:static FlashStatus FlashDriver::mapHalFailure(uint32_t, int, bool)	4

@@ -1,0 +1,4 @@
+../App/app_main.cpp:30:6:void app_init()	72	static,ignoring_inline_asm
+../App/app_main.cpp:95:6:void app_loop()	4	static
+../App/app_main.cpp:97:1:void __static_initialization_and_destruction_0()	16	static
+../App/app_main.cpp:97:1:cpp)	8	static
