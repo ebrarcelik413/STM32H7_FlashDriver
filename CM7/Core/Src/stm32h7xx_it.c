@@ -199,5 +199,9 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
+void FLASH_IRQHandler(void)
+{
+  HAL_FLASH_IRQHandler();
+}
 
 /* USER CODE END 1 */

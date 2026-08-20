@@ -20,6 +20,7 @@ enum class FlashStatus : uint8_t
     ProgramError,
     EraseError,
     VerifyError,
+	NotErased,
 
     NoSpace
 };

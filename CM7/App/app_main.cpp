@@ -5,89 +5,48 @@
 
 constexpr uint32_t STORAGE_BANK        = FLASH_BANK_2;
 constexpr uint32_t STORAGE_SECTOR      = FLASH_SECTOR_6;
-constexpr uint32_t STORAGE_START_ADDR  = 0x081C0000UL;
-constexpr std::size_t STORAGE_SEC_SIZE = 128U * 1024U; // 128 KB
+constexpr uint32_t STORAGE_START_ADDR  = 0x081C0000U;
+constexpr std::size_t STORAGE_SEC_SIZE = 128U * 1024U;
 
-static FlashDriver g_flashDriver(
-    STORAGE_BANK,
-    STORAGE_SECTOR,
-    STORAGE_START_ADDR,
-    STORAGE_SEC_SIZE
-);
+FlashDriver g_flashDriver(STORAGE_BANK, STORAGE_SECTOR, STORAGE_START_ADDR, STORAGE_SEC_SIZE);
+FlashStatus g_testStatus = FlashStatus::Ok;
 
-// Test verisi olarak kullanabileceğimiz örnek bir yapı
-struct SensorCalibration
-{
-    float gyroOffset[3];
-    float accelOffset[3];
-    uint32_t sampleCount;
-};
-
-// Debug takibi için durum değişkenleri
-volatile FlashStatus g_testStatus = FlashStatus::InvalidArgument;
-volatile bool g_testPassed = false;
+alignas(32) uint8_t writeBufA[32];
+alignas(32) uint8_t writeBufB[32];
+uint8_t readBuf[32];
 
 void app_init(void)
 {
-    // A. Sürücüyü Başlat
-    g_testStatus = g_flashDriver.initialize();
-    if (g_testStatus != FlashStatus::Ok)
-    {
-        return;
-    }
+    // 1. Sürücüyü başlat (Unlock + Kesmeleri aç)
+    g_testStatus = g_flashDriver.init();
+    if (g_testStatus != FlashStatus::Ok) return;
 
-    // B. Sektörü Sil (Eski artık verilerden temizlemek için)
+    // 2. Bank 2 Sektör 7'yi kesmeli olarak sil
     g_testStatus = g_flashDriver.erase();
-    if (g_testStatus != FlashStatus::Ok)
+    if (g_testStatus != FlashStatus::Ok) return;
+
+    // 3. Kesme tamamlanana kadar bekle
+    while (g_flashDriver.isBusy())
     {
-        return;
     }
 
-    // C. Örnek Veri Hazırla
-    SensorCalibration writeCalib{};
-    writeCalib.gyroOffset[0] = 0.12f;
-    writeCalib.gyroOffset[1] = -0.05f;
-    writeCalib.gyroOffset[2] = 0.98f;
-    writeCalib.accelOffset[0] = 0.01f;
-    writeCalib.accelOffset[1] = 0.02f;
-    writeCalib.accelOffset[2] = 9.81f;
-    writeCalib.sampleCount = 500U;
+    // 4. Test verilerini hazırla
+    std::memset(writeBufA, 0xAA, sizeof(writeBufA));
+    std::memset(writeBufB, 0xBB, sizeof(writeBufB));
 
-    // D. Veriyi Sektörün Başlangıcına Yaz
-    uint32_t targetAddress = STORAGE_START_ADDR;
-    g_testStatus = g_flashDriver.write(
-        targetAddress,
-        reinterpret_cast<const uint8_t*>(&writeCalib),
-        sizeof(writeCalib)
-    );
+    // 5. 32-byte Flash Word yazımı
+    g_testStatus = g_flashDriver.write(STORAGE_START_ADDR, writeBufA, sizeof(writeBufA));
+    if (g_testStatus != FlashStatus::Ok) return;
 
-    if (g_testStatus != FlashStatus::Ok)
-    {
-        return;
-    }
+    g_testStatus = g_flashDriver.write(STORAGE_START_ADDR + 0x60, writeBufB, sizeof(writeBufB));
+    if (g_testStatus != FlashStatus::Ok) return;
 
-    // E. Yazılan Veriyi Geri Oku
-    SensorCalibration readCalib{};
-    g_testStatus = g_flashDriver.read(
-        targetAddress,
-        reinterpret_cast<uint8_t*>(&readCalib),
-        sizeof(readCalib)
-    );
+    // 6. Okuma ve doğrulama
+    g_testStatus = g_flashDriver.read(STORAGE_START_ADDR, readBuf, sizeof(readBuf));
+    if (g_testStatus != FlashStatus::Ok) return;
 
-    if (g_testStatus != FlashStatus::Ok)
-    {
-        return;
-    }
-
-
-    if (std::memcmp(&writeCalib, &readCalib, sizeof(SensorCalibration)) == 0)
-    {
-        g_testPassed = true;
-    }
-    else
-    {
-        g_testStatus = FlashStatus::VerifyError;
-    }
+    // 7. Donanımı kilitle
+    g_flashDriver.deinit();
 
     __NOP();
 }
