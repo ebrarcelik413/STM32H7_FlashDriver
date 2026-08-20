@@ -5,6 +5,11 @@
 
 extern FlashDriver g_flashDriver;
 
+/* soldaki bank_ sınıftaki private üye deeğişkeni
+ * parantez içindeki bank kullanıcın fonk parametresi
+ * dışarıdan gelen bank degerini sınıfın içindeki bank değişkenine atıyor.
+ */
+
 FlashDriver::FlashDriver(uint32_t bank, uint32_t sector, uint32_t startAddress, std::size_t size)
     : bank_(bank),
       sector_(sector),
