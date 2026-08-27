@@ -1,26 +1,26 @@
 #include "flash_driver.hpp"
-#include "stm32h7xx_hal.h"
 #include <cstring>
 
-
-extern FlashDriver g_flashDriver;
-
-/* soldaki bank_ sınıftaki private üye deeğişkeni
- * parantez içindeki bank kullanıcın fonk parametresi
- * dışarıdan gelen bank degerini sınıfın içindeki bank değişkenine atıyor.
+/*
+ * FlashDriver class'ının constructor'ına constructor member parametreleirni
+ * class'ın private member variable'larına atıyoruz.
+ * bank_, sector_ ... driver obeject'inin kendi state'ini tutuyor.
  */
-
-FlashDriver::FlashDriver(uint32_t bank, uint32_t sector, uint32_t startAddress, std::size_t size)
+FlashDriver::FlashDriver(uint32_t bank,
+                         uint32_t sector,
+                         uint32_t startAddress,
+                         std::size_t size)
     : bank_(bank),
       sector_(sector),
       startAddress_(startAddress),
       size_(size),
-      endAddress_(startAddress + static_cast<uint32_t>(size) - 1U),
-      isInitialized_(false),
-	  isBusy_(false),
-	  lastError_(0U)
+      endAddress_(startAddress + static_cast<uint32_t>(size) - 1U)
 {
 }
+
+/*
+ * driver başlatılırken storage başlangıç adresinin FlashWord sınırına hizalı...
+ */
 
 FlashStatus FlashDriver::init()
 {
@@ -34,35 +34,12 @@ FlashStatus FlashDriver::init()
         return FlashStatus::UnlockError;
     }
 
-    // Bank 2 Interrupts Enable (EOP & OPERR)
-    if (bank_ == FLASH_BANK_2)
-    {
-        __HAL_FLASH_ENABLE_IT_BANK2(FLASH_IT_EOP_BANK2 | FLASH_IT_OPERR_BANK2);
-    }
-    else
-    {
-        __HAL_FLASH_ENABLE_IT_BANK1(FLASH_IT_EOP_BANK1 | FLASH_IT_OPERR_BANK1);
-    }
-
-    // NVIC Flash Interrupt Aç (CM7 çekirdeğinde kesmeyi dinlemek için zorunlu)
-    HAL_NVIC_SetPriority(FLASH_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(FLASH_IRQn);
-
-    isInitialized_ = true;
+    isInitialized_ = true;  //driver kullanılabilir durumda bilgisini kendi state'imde tutuyorum.
     return FlashStatus::Ok;
 }
 
 FlashStatus FlashDriver::deinit()
 {
-    if (bank_ == FLASH_BANK_2)
-    {
-        __HAL_FLASH_DISABLE_IT_BANK2(FLASH_IT_EOP_BANK2 | FLASH_IT_OPERR_BANK2);
-    }
-    else
-    {
-        __HAL_FLASH_DISABLE_IT_BANK1(FLASH_IT_EOP_BANK1 | FLASH_IT_OPERR_BANK1);
-    }
-
     if (HAL_FLASH_Lock() != HAL_OK)
     {
         return FlashStatus::LockError;
@@ -83,35 +60,71 @@ FlashStatus FlashDriver::erase()
     {
         return FlashStatus::Busy;
     }
-
-    // Yalnızca hedef Bank 2 hata ve durum bayraklarını temizle
+/*
+ * Yeni erase operasyonundan önce Bank2’de
+ * önceki operasyondan kalmış EOP ve error flaglerini temizliyorum.
+ * Macro aslında Flash’ın CCR2 register’ındaki clear bitlerine yazıyor.
+ */
     __HAL_FLASH_CLEAR_FLAG_BANK2(
         FLASH_FLAG_ALL_ERRORS_BANK2 |
-        FLASH_FLAG_EOP_BANK2 |
-        FLASH_FLAG_WRPERR_BANK2 |
-        FLASH_FLAG_PGSERR_BANK2 |
-        FLASH_FLAG_STRBERR_BANK2 |
-        FLASH_FLAG_INCERR_BANK2);
-
+        FLASH_FLAG_EOP_BANK2);
+/*
+ * HAL erase fonksiyonuna erase parametrelerini tek tek vermek yerine
+ * HAL’in tanımladığı configuration struct’ını hazırlıyorum.
+ */
     FLASH_EraseInitTypeDef eraseConfig{};
+
     eraseConfig.TypeErase    = FLASH_TYPEERASE_SECTORS;
     eraseConfig.Banks        = bank_;
     eraseConfig.Sector       = sector_;
     eraseConfig.NbSectors    = 1U;
     eraseConfig.VoltageRange = FLASH_VOLTAGE_RANGE_4;
 
+    currentOperation_ = Operation::Erase;
+    flashWordCompleted_  = false;
+    lastError_ = 0U;
     isBusy_ = true;
 
     if (HAL_FLASHEx_Erase_IT(&eraseConfig) != HAL_OK)
     {
+        currentOperation_ = Operation::None;
         isBusy_ = false;
+        lastError_ = HAL_FLASH_GetError();
+
         return FlashStatus::EraseError;
     }
 
     return FlashStatus::Ok;
 }
 
-FlashStatus FlashDriver::write(uint32_t targetAddress, const uint8_t* data, std::size_t length)
+FlashStatus FlashDriver::write(uint32_t targetAddress,
+                               const uint8_t* data,
+                               std::size_t length)
+{
+	/*
+	 * write=writeIT üzerine kurulmuş senkron/blocking wrapper
+	 */
+    FlashStatus status = writeIT(targetAddress, data, length);
+
+    if (status != FlashStatus::Ok)
+    {
+        return status;
+    }
+
+    while (isBusy_)
+    {
+        __WFI();
+        process();
+    }
+
+    return (lastError_ == 0U)
+        ? FlashStatus::Ok
+        : FlashStatus::ProgramError;
+}
+
+FlashStatus FlashDriver::writeIT(uint32_t targetAddress,
+                                 const uint8_t* data,
+                                 std::size_t length)
 {
     if (!isInitialized_)
     {
@@ -133,41 +146,143 @@ FlashStatus FlashDriver::write(uint32_t targetAddress, const uint8_t* data, std:
         return FlashStatus::InvalidLength;
     }
 
-    if (!isRangeValid(targetAddress, length))
-    {
-        return FlashStatus::NoSpace;
-    }
-
     if (!isFlashWordAligned(targetAddress))
     {
         return FlashStatus::AlignmentError;
     }
 
-    std::size_t offset = 0U;
-    alignas(32) uint8_t wordBuffer[FlashWordSize];
-
-    while (offset < length)
+    if (!isRangeValid(targetAddress, length))
     {
-        std::memset(wordBuffer, 0xFF, sizeof(wordBuffer));
+        return FlashStatus::NoSpace;
+    }
 
-        const std::size_t remaining = length - offset;
-        const std::size_t chunk = (remaining < FlashWordSize) ? remaining : FlashWordSize;
+    /*
+     * non-blocking işlem tek fonks çagrısında bitmeyecegi için
+     * yazmanın state'ini class memberlarında saklıyorum.
+     */
+    txData_ = data;
+    txRemaining_ = length;
+    currentWriteAddr_ = targetAddress;
 
-        std::memcpy(wordBuffer, &data[offset], chunk);
+    currentOperation_ = Operation::Write;
+    flashWordCompleted_  = false;
+    lastError_ = 0U;
+    isBusy_ = true;
 
-        const FlashStatus status = programWord(targetAddress + static_cast<uint32_t>(offset), wordBuffer);
-        if (status != FlashStatus::Ok)
-        {
-            return status;
-        }
+    std::memset(alignBuffer_, 0xFF, FlashWordSize);
 
-        offset += FlashWordSize;
+    const std::size_t chunk =
+        (txRemaining_ >= FlashWordSize)
+        ? FlashWordSize
+        : txRemaining_;
+
+    std::memcpy(alignBuffer_, txData_, chunk);
+
+    FlashStatus status =
+        programWord(currentWriteAddr_, alignBuffer_);
+
+    if (status != FlashStatus::Ok)
+    {
+        currentOperation_ = Operation::None;
+        isBusy_ = false;
+        return status;
+    }
+
+    txData_ += chunk;
+    txRemaining_ -= chunk;
+    currentWriteAddr_ += FlashWordSize;
+
+    return FlashStatus::Ok;
+}
+
+FlashStatus FlashDriver::programWord(uint32_t address,
+                                     const uint8_t* data)
+{
+    if (!isErased(address, FlashWordSize))
+    {
+        return FlashStatus::NotErased;
+    }
+
+    __HAL_FLASH_CLEAR_FLAG_BANK2(
+        FLASH_FLAG_ALL_ERRORS_BANK2 |
+        FLASH_FLAG_EOP_BANK2);
+
+    if (HAL_FLASH_Program_IT(
+            FLASH_TYPEPROGRAM_FLASHWORD,
+            address,
+            reinterpret_cast<uint32_t>(data)) != HAL_OK)
+    {
+        lastError_ = HAL_FLASH_GetError();
+        return FlashStatus::ProgramError;
     }
 
     return FlashStatus::Ok;
 }
 
-FlashStatus FlashDriver::read(uint32_t sourceAddress, uint8_t* destination, std::size_t length) const
+void FlashDriver::onOperationComplete()
+{
+    if (currentOperation_ == Operation::Erase)
+    {
+        currentOperation_ = Operation::None;
+        isBusy_ = false;
+        return;
+    }
+
+    if (currentOperation_ == Operation::Write)
+    {
+    	flashWordCompleted_  = true;
+    }
+}
+
+void FlashDriver::process()
+{
+    if (!isBusy_ || !flashWordCompleted_)
+    {
+        return;
+    }
+
+    flashWordCompleted_ = false;
+
+    if (currentOperation_ != Operation::Write)
+    {
+        return;
+    }
+
+    // Son FlashWord da tamamlandı.
+    if (txRemaining_ == 0U)
+    {
+        currentOperation_ = Operation::None;
+        isBusy_ = false;
+        return;
+    }
+
+    std::memset(alignBuffer_, 0xFF, FlashWordSize);
+
+    const std::size_t chunk =
+        (txRemaining_ >= FlashWordSize)
+        ? FlashWordSize
+        : txRemaining_;
+
+    std::memcpy(alignBuffer_, txData_, chunk);
+
+    FlashStatus status =
+        programWord(currentWriteAddr_, alignBuffer_);
+
+    if (status != FlashStatus::Ok)
+    {
+        currentOperation_ = Operation::None;
+        isBusy_ = false;
+        return;
+    }
+
+    txData_ += chunk;
+    txRemaining_ -= chunk;
+    currentWriteAddr_ += FlashWordSize;
+}
+
+FlashStatus FlashDriver::read(uint32_t sourceAddress,
+                              uint8_t* destination,
+                              std::size_t length) const
 {
     if (!isInitialized_)
     {
@@ -189,28 +304,21 @@ FlashStatus FlashDriver::read(uint32_t sourceAddress, uint8_t* destination, std:
         return FlashStatus::InvalidAddress;
     }
 
-    std::memcpy(destination, reinterpret_cast<const void*>(sourceAddress), length);
+    std::memcpy(
+        destination,
+        reinterpret_cast<const void*>(sourceAddress),
+        length);
+
     return FlashStatus::Ok;
 }
 
-FlashStatus FlashDriver::programWord(uint32_t address, const uint8_t* data)
+FlashStatus FlashDriver::verify(uint32_t address,
+                                const uint8_t* expected,
+                                std::size_t length) const
 {
-    if (!isErased(address, FlashWordSize))
-    {
-        return FlashStatus::NotErased;
-    }
+    const auto* actual =
+        reinterpret_cast<const uint8_t*>(address);
 
-    if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_FLASHWORD, address, reinterpret_cast<uint32_t>(data)) != HAL_OK)
-    {
-        return FlashStatus::ProgramError;
-    }
-
-    return verify(address, data, FlashWordSize);
-}
-
-FlashStatus FlashDriver::verify(uint32_t address, const uint8_t* expected, std::size_t length) const
-{
-    const auto* actual = reinterpret_cast<const uint8_t*>(address);
     for (std::size_t i = 0U; i < length; ++i)
     {
         if (actual[i] != expected[i])
@@ -218,17 +326,21 @@ FlashStatus FlashDriver::verify(uint32_t address, const uint8_t* expected, std::
             return FlashStatus::VerifyError;
         }
     }
+
     return FlashStatus::Ok;
 }
 
-bool FlashDriver::isErased(uint32_t address, std::size_t length) const
+bool FlashDriver::isErased(uint32_t address,
+                           std::size_t length) const
 {
     if (!isRangeValid(address, length))
     {
         return false;
     }
 
-    const auto* source = reinterpret_cast<const uint8_t*>(address);
+    const auto* source =
+        reinterpret_cast<const uint8_t*>(address);
+
     for (std::size_t i = 0U; i < length; ++i)
     {
         if (source[i] != 0xFFU)
@@ -236,6 +348,7 @@ bool FlashDriver::isErased(uint32_t address, std::size_t length) const
             return false;
         }
     }
+
     return true;
 }
 
@@ -244,44 +357,49 @@ bool FlashDriver::isFlashWordAligned(uint32_t address) const
     return (address % FlashWordSize) == 0U;
 }
 
-bool FlashDriver::isRangeValid(uint32_t address, std::size_t length) const
+bool FlashDriver::isRangeValid(uint32_t address,
+                               std::size_t length) const
 {
-    if (length == 0U || address < startAddress_)
+    if ((length == 0U) || (address < startAddress_))
     {
         return false;
     }
 
-    const uint64_t lastAddress = static_cast<uint64_t>(address) + static_cast<uint64_t>(length) - 1ULL;
-    return lastAddress <= endAddress_;     // lastaddress=sonbaytınadresi eger sınırı aşarsa false no space döner.
+    const uint64_t lastAddress =
+        static_cast<uint64_t>(address) +
+        static_cast<uint64_t>(length) -
+        1ULL;
+
+    return lastAddress <= endAddress_;
 }
 
-// Flash işlemi (silme vb.) donanım seviyesinde başarıyla bittiğinde çağrılır;
-// meşguliyet bayrağını indirerek bekleyen döngülerin kilidini açar.
-void FlashDriver::onOperationComplete()
-{
-    isBusy_ = false;
-}
-
-// Flash işlemi sırasında donanımsal bir hata oluştuğunda çağrılır;
-// hata kodunu kaydeder ve sistemin sonsuz döngüde kilitli kalmasını önler.
+//burada çagrılıyor HAL_FLASH_OperationErrorCallback(...)
 void FlashDriver::onError(uint32_t errorCode)
 {
     lastError_ = errorCode;
+
+    currentOperation_ = Operation::None;
+    flashWordCompleted_  = false;
+
     isBusy_ = false;
+    txRemaining_ = 0U;
 }
 
-// ST HAL kütüphanesi saf C ile yazıldığı için C++ Name Mangling'i (isim bozulmasını)
-// engellemek adına extern "C" kullanılır. Donanım işlemi tamamlandığında HAL bu
-// global C fonksiyonunu tetikler, fonksiyon da sinyali C++ nesnemize iletir.
+/*
+ * STM32 HAL C ile yazildigi icin callback'leri C linkage ile tanimliyoruz.
+ * Boylece C++ name mangling uygulanmaz ve HAL bekledigi callback symbol'unu bulabilir.
+ */
+
 extern "C" void HAL_FLASH_EndOfOperationCallback(uint32_t ReturnValue)
 {
-    (void)ReturnValue; // Kullanılmayan parametre uyarısını engeller
+    (void)ReturnValue;
+
     g_flashDriver.onOperationComplete();
 }
 
-// Flash donanımında yazma koruması, voltaj dalgalanması veya sıra hatası
-// gibi bir kesme hatası oluştuğunda ST HAL tarafından tetiklenen köprü fonksiyondur.
 extern "C" void HAL_FLASH_OperationErrorCallback(uint32_t ReturnValue)
 {
-    g_flashDriver.onError(ReturnValue);
+    (void)ReturnValue;
+
+    g_flashDriver.onError(HAL_FLASH_GetError());
 }

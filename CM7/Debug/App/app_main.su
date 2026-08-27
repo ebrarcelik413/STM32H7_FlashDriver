@@ -1,12 +1,20 @@
-../Flash/flash_driver.hpp:23:10:bool FlashDriver::isBusy() const	16	static
-../App/app_main.cpp:10:16:int __io_putchar(int)	24	static
-../App/app_main.cpp:29:6:void app_init()	8	static,ignoring_inline_asm
-../App/app_main.cpp:78:6:void app_loop()	4	static
-../App/app_main.cpp:80:1:void __static_initialization_and_destruction_0()	16	static
+../Flash/flash_driver.hpp:38:10:bool FlashDriver::isBusy() const	16	static
+../Flash/flash_driver.hpp:43:14:uint32_t FlashDriver::getLastError() const	16	static
+../App/app_main.cpp:86:13:void initDwtCycleCounter()	4	static
+../App/app_main.cpp:96:24:uint32_t alignTo32(uint32_t)	16	static
+../App/app_main.cpp:108:13:void sendText(const char*)	16	static
+../App/app_main.cpp:122:13:void printMenu()	8	static
+../App/app_main.cpp:142:6:void app_init()	8	static
+../App/app_main.cpp:183:6:void app_loop()	224	static
+../App/app_main.cpp:745:1:void __static_initialization_and_destruction_0()	16	static
+../App/../Uart/iuart_driver.hpp:19:13:IUartDriver::~IUartDriver()	16	static
+../App/../Uart/iuart_driver.hpp:19:13:virtual IUartDriver::~IUartDriver()	16	static
+../App/../Uart/uart_driver.hpp:13:5:UartDriver::~UartDriver()	16	static
+../App/../Uart/uart_driver.hpp:13:5:virtual UartDriver::~UartDriver()	16	static
 ../Flash/iflash_driver.hpp:10:13:IFlashDriver::~IFlashDriver()	16	static
 ../Flash/iflash_driver.hpp:10:13:virtual IFlashDriver::~IFlashDriver()	16	static
-../Flash/flash_driver.hpp:15:5:FlashDriver::~FlashDriver()	16	static
-../Flash/flash_driver.hpp:15:5:virtual FlashDriver::~FlashDriver()	16	static
-../App/app_main.cpp:80:1:void __static_initialization_and_destruction_1()	8	static
-../App/app_main.cpp:80:1:cpp)	8	static
-../App/app_main.cpp:80:1:cpp)	8	static
+../Flash/flash_driver.hpp:20:5:FlashDriver::~FlashDriver()	16	static
+../Flash/flash_driver.hpp:20:5:virtual FlashDriver::~FlashDriver()	16	static
+../App/app_main.cpp:745:1:void __static_initialization_and_destruction_1()	8	static
+../App/app_main.cpp:745:1:cpp)	8	static
+../App/app_main.cpp:745:1:cpp)	8	static
