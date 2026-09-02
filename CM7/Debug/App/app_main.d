@@ -30,8 +30,8 @@ App/app_main.o: ../App/app_main.cpp ../App/app_main.h ../Core/Inc/main.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
  ../Flash/flash_driver.hpp ../Flash/flash_types.hpp \
- ../Flash/iflash_driver.hpp ../App/../Uart/uart_driver.hpp \
- ../App/../Uart/iuart_driver.hpp
+ ../Flash/iflash_driver.hpp ../Uart/uart_driver.hpp \
+ ../Uart/iuart_driver.hpp ../Uart/protocol_parser.hpp
 ../App/app_main.h:
 ../Core/Inc/main.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
@@ -67,5 +67,6 @@ App/app_main.o: ../App/app_main.cpp ../App/app_main.h ../Core/Inc/main.h \
 ../Flash/flash_driver.hpp:
 ../Flash/flash_types.hpp:
 ../Flash/iflash_driver.hpp:
-../App/../Uart/uart_driver.hpp:
-../App/../Uart/iuart_driver.hpp:
+../Uart/uart_driver.hpp:
+../Uart/iuart_driver.hpp:
+../Uart/protocol_parser.hpp:

@@ -78,22 +78,26 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 
+	SCB->VTOR = FLASH_BANK1_BASE;
+
   /* USER CODE END 1 */
 /* USER CODE BEGIN Boot_Mode_Sequence_0 */
   int32_t timeout;
 /* USER CODE END Boot_Mode_Sequence_0 */
 
   /* MPU Configuration--------------------------------------------------------*/
-  MPU_Config();
+//  MPU_Config();
 
 /* USER CODE BEGIN Boot_Mode_Sequence_1 */
   /* Wait until CPU2 boots and enters in stop mode or timeout*/
   timeout = 0xFFFF;
+ /*
   while((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) != RESET) && (timeout-- > 0));
   if ( timeout < 0 )
   {
-  //Error_Handler();
+	//  Error_Handler();
   }
+  */
 /* USER CODE END Boot_Mode_Sequence_1 */
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -120,7 +124,7 @@ timeout = 0xFFFF;
 while((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) == RESET) && (timeout-- > 0));
 if ( timeout < 0 )
 {
-Error_Handler();
+//Error_Handler();
 }
 /* USER CODE END Boot_Mode_Sequence_2 */
 
@@ -134,11 +138,13 @@ Error_Handler();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-	app_init();
 	HAL_NVIC_SetPriority(FLASH_IRQn, 5, 0);
 	HAL_NVIC_EnableIRQ(FLASH_IRQn);
-	// 1. Vektör tablosunu Bank 1 başlangıcına sabitle
-	SCB->VTOR = FLASH_BANK1_BASE;
+
+	app_init();
+
+	HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+	HAL_NVIC_EnableIRQ(USART1_IRQn);
 
   /* USER CODE END 2 */
 
@@ -196,7 +202,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)

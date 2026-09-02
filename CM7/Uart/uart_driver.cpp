@@ -1,15 +1,22 @@
 #include "uart_driver.hpp"
+#include <cstring>
+
+extern UartDriver g_uartDriver;
 
 
-/**
- * Sinifin kurucu metodudur.
- * huart parametresi driver'in kullanacagi UART handle'ini tutar.
- */
+// ============================================================
+// CONSTRUCTOR
+// ============================================================
+
 UartDriver::UartDriver(UART_HandleTypeDef* huart)
     : huart_(huart)
 {
 }
 
+
+// ============================================================
+// INIT / DEINIT
+// ============================================================
 
 UartStatus UartDriver::init()
 {
@@ -18,12 +25,14 @@ UartStatus UartDriver::init()
         return UartStatus::InvalidParam;
     }
 
+    clear();
+
+    parser_.reset();
+
     txBusy_ = false;
-
-    rxBusy_ = false;
-    rxDataReady_ = false;
-
     isInitialized_ = true;
+
+    startReceiveIT();
 
     return UartStatus::Ok;
 }
@@ -31,13 +40,9 @@ UartStatus UartDriver::init()
 
 UartStatus UartDriver::deinit()
 {
-    /*
-     * TX veya RX islemi devam ediyorsa
-     * driver'i kapatmiyoruz.
-     */
-    if (txBusy_ || rxBusy_)
+    if (huart_ != nullptr)
     {
-        return UartStatus::Busy;
+        HAL_UART_AbortReceive(huart_);
     }
 
     isInitialized_ = false;
@@ -46,45 +51,301 @@ UartStatus UartDriver::deinit()
 }
 
 
+// ============================================================
+// RX INTERRUPT
+// ============================================================
+
+void UartDriver::startReceiveIT()
+{
+    if (isInitialized_ && huart_ != nullptr)
+    {
+        (void)HAL_UART_Receive_IT(
+            huart_,
+            &rxRawByte_,
+            1U);
+    }
+}
+
+
+void UartDriver::onRxByteReceived()
+{
+    /*
+     * Gelen byte artik direkt data buffer'a yazilmaz.
+     *
+     * Once ProtocolParser'a gider:
+     *
+     * A5 5A CMD LENGTH DATA CHECKSUM
+     *
+     * Paket tamamlaninca app_main:
+     *
+     * CMD 01 -> clear()
+     * CMD 02 -> 70 byte IMU appendData()
+     * CMD 03 -> 30 byte GPS appendData()
+     * CMD 04 -> readData()
+     *
+     * yapar.
+     */
+
+    parser_.pushByte(rxRawByte_);
+
+    // Sonraki byte'i bekle.
+    startReceiveIT();
+}
+
+
+// ============================================================
+// DATA BUFFER - WRITE
+// ============================================================
+
+bool UartDriver::appendData(
+    const uint8_t* data,
+    std::size_t length)
+{
+    if (data == nullptr || length == 0U)
+    {
+        return false;
+    }
+
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    /*
+     * Tum veri sigmiyorsa hicbir sey yazma.
+     *
+     * Ornek:
+     *
+     * buffer = 40 byte
+     * yeni veri = 70 byte
+     *
+     * 40 + 70 = 110
+     *
+     * -> false
+     * -> eski 40 byte korunur
+     */
+    if (length > (RX_BUFFER_SIZE - rxCount_))
+    {
+        isOverflow_ = true;
+
+        if (primask == 0U)
+        {
+            __enable_irq();
+        }
+
+        return false;
+    }
+
+    std::memcpy(
+        &rxBuffer_[rxCount_],
+        data,
+        length);
+
+    rxCount_ += length;
+
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+
+    return true;
+}
+
+
+// ============================================================
+// DATA BUFFER - READ
+// ============================================================
+
+bool UartDriver::readByte(uint8_t& byte)
+{
+    return readData(&byte, 1U);
+}
+
+
+bool UartDriver::readData(
+    uint8_t* destination,
+    std::size_t length)
+{
+    if (destination == nullptr || length == 0U)
+    {
+        return false;
+    }
+
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    /*
+     * Yeterli veri yoksa buffer'a dokunma.
+     *
+     * buffer = 70
+     * readData(..., 80)
+     *
+     * -> false
+     * -> buffer hala 70
+     */
+    if (rxCount_ < length)
+    {
+        if (primask == 0U)
+        {
+            __enable_irq();
+        }
+
+        return false;
+    }
+
+    // Ilk N byte'i kullaniciya ver.
+    std::memcpy(
+        destination,
+        rxBuffer_,
+        length);
+
+    /*
+     * Okunan kisim buffer'dan dusurulur.
+     *
+     * Ornek:
+     *
+     * 70 byte var
+     * 60 byte okundu
+     *
+     * remaining = 10
+     */
+    const std::size_t remaining =
+        rxCount_ - length;
+
+    if (remaining > 0U)
+    {
+        /*
+         * Kalan verileri buffer'in basina kaydir.
+         */
+        std::memmove(
+            rxBuffer_,
+            rxBuffer_ + length,
+            remaining);
+    }
+
+    /*
+     * Debug ekraninda eski veriler gorunmesin.
+     */
+    std::memset(
+        rxBuffer_ + remaining,
+        0,
+        length);
+
+    rxCount_ = remaining;
+
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+
+    return true;
+}
+
+
+// ============================================================
+// BUFFER INFO
+// ============================================================
+
+std::size_t UartDriver::getAvailableDataCount() const
+{
+    return rxCount_;
+}
+
+
+std::size_t UartDriver::getFreeSpace() const
+{
+    return RX_BUFFER_SIZE - rxCount_;
+}
+
+
+void UartDriver::clear()
+{
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    std::memset(
+        rxBuffer_,
+        0,
+        sizeof(rxBuffer_));
+
+    rxCount_ = 0U;
+    isOverflow_ = false;
+
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+}
+
+
+void UartDriver::flushRxBuffer()
+{
+    clear();
+}
+
+
+bool UartDriver::isOverflow() const
+{
+    return isOverflow_;
+}
+
+
+// ============================================================
+// PROTOCOL
+// ============================================================
+
+bool UartDriver::getReceivedPacket(
+    BinaryPacket& packet)
+{
+    return parser_.getPacket(packet);
+}
+
+
+bool UartDriver::hasProtocolChecksumError() const
+{
+    return parser_.hasChecksumError();
+}
+
+
+void UartDriver::clearProtocolChecksumError()
+{
+    parser_.clearChecksumError();
+}
+
+
+// ============================================================
+// TX
+// ============================================================
+
+bool UartDriver::isTxBusy() const
+{
+    return txBusy_;
+}
+
+
 UartStatus UartDriver::send(
     const uint8_t* data,
     std::size_t length)
 {
-    if (!isInitialized_ || (huart_ == nullptr))
-    {
-        return UartStatus::NotInitialized;
-    }
+    /*
+     * IUartDriver interface'inde oldugu icin tutuluyor.
+     *
+     * Bizim asil TX yolumuz sendDMA().
+     */
 
-    if ((data == nullptr) || (length == 0U))
+    if (!isInitialized_ ||
+        data == nullptr ||
+        length == 0U)
     {
         return UartStatus::InvalidParam;
     }
 
-    /*
-     * DMA TX devam ederken ayni UART uzerinden
-     * polling TX baslatilmasina izin vermiyoruz.
-     */
-    if (txBusy_)
-    {
-        return UartStatus::Busy;
-    }
-
-    HAL_StatusTypeDef status =
+    return (
         HAL_UART_Transmit(
             huart_,
             const_cast<uint8_t*>(data),
             static_cast<uint16_t>(length),
-            HAL_MAX_DELAY
-        );
-
-    if (status == HAL_BUSY)
-    {
-        return UartStatus::Busy;
-    }
-
-    return (status == HAL_OK)
-        ? UartStatus::Ok
-        : UartStatus::Error;
+            1000U) == HAL_OK)
+            ? UartStatus::Ok
+            : UartStatus::Error;
 }
 
 
@@ -92,20 +353,13 @@ UartStatus UartDriver::sendDMA(
     const uint8_t* data,
     std::size_t length)
 {
-    if (!isInitialized_ || (huart_ == nullptr))
-    {
-        return UartStatus::NotInitialized;
-    }
-
-    if ((data == nullptr) || (length == 0U))
+    if (!isInitialized_ ||
+        data == nullptr ||
+        length == 0U)
     {
         return UartStatus::InvalidParam;
     }
 
-    /*
-     * Onceki DMA TX hala devam ediyorsa
-     * ikinci transferi baslatmiyoruz.
-     */
     if (txBusy_)
     {
         return UartStatus::Busy;
@@ -113,271 +367,117 @@ UartStatus UartDriver::sendDMA(
 
     txBusy_ = true;
 
-    HAL_StatusTypeDef status =
-        HAL_UART_Transmit_DMA(
+    if (HAL_UART_Transmit_DMA(
             huart_,
             const_cast<uint8_t*>(data),
-            static_cast<uint16_t>(length)
-        );
-
-    /*
-     * DMA baslatilamadiysa aktif TX yoktur.
-     */
-    if (status != HAL_OK)
+            static_cast<uint16_t>(length))
+        != HAL_OK)
     {
         txBusy_ = false;
 
-        return (status == HAL_BUSY)
-            ? UartStatus::Busy
-            : UartStatus::Error;
+        return UartStatus::Error;
     }
 
     return UartStatus::Ok;
 }
 
 
-/*
- * Polling RX.
- *
- * Bunu kaldirmak zorunda degiliz.
- * Eski polling kullanimlari icin driver'da kalabilir.
- */
+// ============================================================
+// OLD POLLING RECEIVE
+// ============================================================
+
 UartStatus UartDriver::receive(
     uint8_t* data,
     std::size_t length,
     uint32_t timeoutMs)
 {
-    if (!isInitialized_ || (huart_ == nullptr))
-    {
-        return UartStatus::NotInitialized;
-    }
+    /*
+     * IUartDriver interface'inde hala mevcut.
+     *
+     * app_main bunu KULLANMIYOR.
+     *
+     * Gercek RX:
+     *
+     * HAL_UART_Receive_IT()
+     *
+     * ile yapiliyor.
+     */
 
-    if ((data == nullptr) || (length == 0U))
+    if (!isInitialized_ ||
+        data == nullptr ||
+        length == 0U)
     {
         return UartStatus::InvalidParam;
     }
 
-    /*
-     * Interrupt RX devam ederken ayni UART icin
-     * polling RX baslatmiyoruz.
-     */
-    if (rxBusy_)
-    {
-        return UartStatus::Busy;
-    }
-
-    HAL_StatusTypeDef status =
+    return (
         HAL_UART_Receive(
             huart_,
             data,
             static_cast<uint16_t>(length),
-            timeoutMs
-        );
-
-    if (status == HAL_BUSY)
-    {
-        return UartStatus::Busy;
-    }
-
-    if (status == HAL_TIMEOUT)
-    {
-        return UartStatus::Timeout;
-    }
-
-    return (status == HAL_OK)
-        ? UartStatus::Ok
-        : UartStatus::Error;
-}
-
-
-/*
- * Interrupt tabanli RX baslatir.
- *
- * Fonksiyon verinin gelmesini beklemez.
- * Sadece RX islemini baslatir ve geri doner.
- */
-UartStatus UartDriver::receiveIT(
-    uint8_t* data,
-    std::size_t length)
-{
-    if (!isInitialized_ || (huart_ == nullptr))
-    {
-        return UartStatus::NotInitialized;
-    }
-
-    if ((data == nullptr) || (length == 0U))
-    {
-        return UartStatus::InvalidParam;
-    }
-
-    /*
-     * Onceki RX hala tamamlanmadiysa
-     * ayni buffer icin yeni RX baslatmiyoruz.
-     */
-    if (rxBusy_)
-    {
-        return UartStatus::Busy;
-    }
-
-    /*
-     * Yeni RX basliyor.
-     *
-     * Buffer henuz application tarafindan
-     * okunmaya hazir degil.
-     */
-    rxBusy_ = true;
-    rxDataReady_ = false;
-
-    HAL_StatusTypeDef status =
-        HAL_UART_Receive_IT(
-            huart_,
-            data,
-            static_cast<uint16_t>(length)
-        );
-
-    /*
-     * HAL RX interrupt islemini baslatamadiysa
-     * aktif bir RX yoktur.
-     */
-    if (status != HAL_OK)
-    {
-        rxBusy_ = false;
-
-        return (status == HAL_BUSY)
-            ? UartStatus::Busy
+            timeoutMs) == HAL_OK)
+            ? UartStatus::Ok
             : UartStatus::Error;
+}
+
+
+// ============================================================
+// CALLBACK HELPERS
+// ============================================================
+
+void UartDriver::onError()
+{
+    if (huart_ == nullptr)
+    {
+        return;
     }
 
-    return UartStatus::Ok;
+    __HAL_UART_CLEAR_OREFLAG(huart_);
+    __HAL_UART_CLEAR_NEFLAG(huart_);
+    __HAL_UART_CLEAR_FEFLAG(huart_);
+
+    startReceiveIT();
 }
 
 
-/*
- * TX DMA halen devam ediyor mu?
- */
-bool UartDriver::isTxBusy() const
-{
-    return txBusy_;
-}
-
-
-/*
- * RX interrupt islemi halen devam ediyor mu?
- */
-bool UartDriver::isRxBusy() const
-{
-    return rxBusy_;
-}
-
-
-/*
- * RX buffer tamamen doldu mu ve
- * application tarafindan okunabilir mi?
- */
-bool UartDriver::isRxDataReady() const
-{
-    return rxDataReady_;
-}
-
-
-/*
- * Application RX verisini isledikten sonra
- * ready flag'ini temizler.
- */
-void UartDriver::clearRxDataReady()
-{
-    rxDataReady_ = false;
-}
-
-
-/*
- * UART TX tamamen bittiginde
- * HAL_UART_TxCpltCallback tarafindan cagrilir.
- */
 void UartDriver::onTxComplete()
 {
     txBusy_ = false;
 }
 
 
-/*
- * Istenen RX verisinin tamami geldiginde
- * HAL_UART_RxCpltCallback tarafindan cagrilir.
- */
-void UartDriver::onRxComplete()
-{
-    /*
-     * Artik UART buffer'a veri yazmiyor.
-     */
-    rxBusy_ = false;
+// ============================================================
+// HAL CALLBACKS
+// ============================================================
 
-    /*
-     * Buffer tamamen doldu.
-     * Application artik okuyabilir.
-     */
-    rxDataReady_ = true;
-}
-
-
-/*
- * UART tarafinda hata olustugunda
- * HAL_UART_ErrorCallback tarafindan cagrilir.
- */
-void UartDriver::onError()
-{
-    /*
-     * Hata durumunda driver'in Busy state'lerinde
-     * takili kalmasini engelliyoruz.
-     */
-    txBusy_ = false;
-    rxBusy_ = false;
-}
-
-
-/*
- * extern sadece:
- * "Bu nesne baska dosyada var, burada kullanacagim."
- * demektir.
- */
-extern UART_HandleTypeDef huart1;
-extern UartDriver g_uartDriver;
-
-
-/*
- * TX tamamen bittiginde HAL tarafindan cagrilir.
- */
-extern "C" void HAL_UART_TxCpltCallback(
+extern "C"
+void HAL_UART_RxCpltCallback(
     UART_HandleTypeDef* huart)
 {
-    if (huart == &huart1)
+    if (huart->Instance == USART1)
     {
-        g_uartDriver.onTxComplete();
+        g_uartDriver.onRxByteReceived();
     }
 }
 
 
-/*
- * RX icin istenen tum byte'lar geldiginde
- * HAL tarafindan cagrilir.
- */
-extern "C" void HAL_UART_RxCpltCallback(
+extern "C"
+void HAL_UART_ErrorCallback(
     UART_HandleTypeDef* huart)
 {
-    if (huart == &huart1)
-    {
-        g_uartDriver.onRxComplete();
-    }
-}
-
-
-/*
- * UART hata olusturdugunda HAL tarafindan cagrilir.
- */
-extern "C" void HAL_UART_ErrorCallback(
-    UART_HandleTypeDef* huart)
-{
-    if (huart == &huart1)
+    if (huart->Instance == USART1)
     {
         g_uartDriver.onError();
+    }
+}
+
+
+extern "C"
+void HAL_UART_TxCpltCallback(
+    UART_HandleTypeDef* huart)
+{
+    if (huart->Instance == USART1)
+    {
+        g_uartDriver.onTxComplete();
     }
 }

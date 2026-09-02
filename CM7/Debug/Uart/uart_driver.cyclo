@@ -1,22 +1,37 @@
+../Uart/protocol_parser.hpp:32:10:bool ProtocolParser::pushByte(uint8_t)	19
+../Uart/protocol_parser.hpp:148:10:bool ProtocolParser::getPacket(BinaryPacket&)	2
+../Uart/protocol_parser.hpp:160:10:bool ProtocolParser::hasChecksumError() const	1
+../Uart/protocol_parser.hpp:165:10:void ProtocolParser::clearChecksumError()	1
+../Uart/protocol_parser.hpp:170:10:void ProtocolParser::reset()	1
+../Uart/protocol_parser.hpp:189:10:void ProtocolParser::resetWorkingState()	1
+../Uart/protocol_parser.hpp:21:7:constexpr ProtocolParser::ProtocolParser()	1
 ../Uart/iuart_driver.hpp:16:7:constexpr IUartDriver::IUartDriver()	1
 ../Uart/iuart_driver.hpp:19:13:IUartDriver::~IUartDriver()	1
 ../Uart/iuart_driver.hpp:19:13:virtual IUartDriver::~IUartDriver()	1
-../Uart/uart_driver.cpp:8:1:UartDriver::UartDriver(UART_HandleTypeDef*)	1
-../Uart/uart_driver.cpp:14:12:virtual UartStatus UartDriver::init()	2
-../Uart/uart_driver.cpp:32:12:virtual UartStatus UartDriver::deinit()	4
-../Uart/uart_driver.cpp:49:12:virtual UartStatus UartDriver::send(const uint8_t*, std::size_t)	7
-../Uart/uart_driver.cpp:91:12:virtual UartStatus UartDriver::sendDMA(const uint8_t*, std::size_t)	8
-../Uart/uart_driver.cpp:145:12:virtual UartStatus UartDriver::receive(uint8_t*, std::size_t, uint32_t)	8
-../Uart/uart_driver.cpp:199:12:UartStatus UartDriver::receiveIT(uint8_t*, std::size_t)	8
-../Uart/uart_driver.cpp:258:6:bool UartDriver::isTxBusy() const	1
-../Uart/uart_driver.cpp:267:6:bool UartDriver::isRxBusy() const	1
-../Uart/uart_driver.cpp:277:6:bool UartDriver::isRxDataReady() const	1
-../Uart/uart_driver.cpp:287:6:void UartDriver::clearRxDataReady()	1
-../Uart/uart_driver.cpp:297:6:void UartDriver::onTxComplete()	1
-../Uart/uart_driver.cpp:307:6:void UartDriver::onRxComplete()	1
-../Uart/uart_driver.cpp:326:6:void UartDriver::onError()	1
-../Uart/uart_driver.cpp:349:17:void HAL_UART_TxCpltCallback(UART_HandleTypeDef*)	2
-../Uart/uart_driver.cpp:363:17:void HAL_UART_RxCpltCallback(UART_HandleTypeDef*)	2
-../Uart/uart_driver.cpp:376:17:void HAL_UART_ErrorCallback(UART_HandleTypeDef*)	2
-../Uart/uart_driver.hpp:13:5:UartDriver::~UartDriver()	1
-../Uart/uart_driver.hpp:13:5:virtual UartDriver::~UartDriver()	1
+../Uart/uart_driver.cpp:11:1:UartDriver::UartDriver(UART_HandleTypeDef*)	1
+../Uart/uart_driver.cpp:21:12:virtual UartStatus UartDriver::init()	2
+../Uart/uart_driver.cpp:41:12:virtual UartStatus UartDriver::deinit()	2
+../Uart/uart_driver.cpp:58:6:void UartDriver::startReceiveIT()	3
+../Uart/uart_driver.cpp:70:6:void UartDriver::onRxByteReceived()	1
+../Uart/uart_driver.cpp:100:6:bool UartDriver::appendData(const uint8_t*, std::size_t)	6
+../Uart/uart_driver.cpp:157:6:bool UartDriver::readByte(uint8_t&)	1
+../Uart/uart_driver.cpp:163:6:bool UartDriver::readData(uint8_t*, std::size_t)	7
+../Uart/uart_driver.cpp:247:13:std::size_t UartDriver::getAvailableDataCount() const	1
+../Uart/uart_driver.cpp:253:13:std::size_t UartDriver::getFreeSpace() const	1
+../Uart/uart_driver.cpp:259:6:void UartDriver::clear()	2
+../Uart/uart_driver.cpp:279:6:void UartDriver::flushRxBuffer()	1
+../Uart/uart_driver.cpp:285:6:bool UartDriver::isOverflow() const	1
+../Uart/uart_driver.cpp:295:6:bool UartDriver::getReceivedPacket(BinaryPacket&)	1
+../Uart/uart_driver.cpp:302:6:bool UartDriver::hasProtocolChecksumError() const	1
+../Uart/uart_driver.cpp:308:6:void UartDriver::clearProtocolChecksumError()	1
+../Uart/uart_driver.cpp:318:6:bool UartDriver::isTxBusy() const	1
+../Uart/uart_driver.cpp:324:12:virtual UartStatus UartDriver::send(const uint8_t*, std::size_t)	4
+../Uart/uart_driver.cpp:352:12:virtual UartStatus UartDriver::sendDMA(const uint8_t*, std::size_t)	6
+../Uart/uart_driver.cpp:389:12:virtual UartStatus UartDriver::receive(uint8_t*, std::size_t, uint32_t)	4
+../Uart/uart_driver.cpp:428:6:void UartDriver::onError()	2
+../Uart/uart_driver.cpp:443:6:void UartDriver::onTxComplete()	1
+../Uart/uart_driver.cpp:454:6:void HAL_UART_RxCpltCallback(UART_HandleTypeDef*)	2
+../Uart/uart_driver.cpp:465:6:void HAL_UART_ErrorCallback(UART_HandleTypeDef*)	2
+../Uart/uart_driver.cpp:476:6:void HAL_UART_TxCpltCallback(UART_HandleTypeDef*)	2
+../Uart/uart_driver.hpp:17:5:UartDriver::~UartDriver()	1
+../Uart/uart_driver.hpp:17:5:virtual UartDriver::~UartDriver()	1

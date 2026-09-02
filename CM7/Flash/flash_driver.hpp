@@ -21,44 +21,26 @@ public:
 
     FlashStatus init() override;
     FlashStatus deinit() override;
-    FlashStatus erase() override;
 
-    FlashStatus write(uint32_t targetAddress,
-                      const uint8_t* data,
-                      std::size_t length) override;
+    // --- 1. Polling (Blocking) API'leri ---
+    FlashStatus erase() override; // Varsayılan blocking erase
+    FlashStatus eraseBlocking();
+    FlashStatus write(uint32_t targetAddress, const uint8_t* data, std::size_t length) override;
+    FlashStatus writeBlocking(uint32_t targetAddress, const uint8_t* data, std::size_t length);
 
-    FlashStatus read(uint32_t sourceAddress,
-                     uint8_t* destination,
-                     std::size_t length) const override;
+    // --- 2. Non-Blocking (Interrupt) API'leri ---
+    FlashStatus eraseIT();
+    FlashStatus writeIT(uint32_t targetAddress, const uint8_t* data, std::size_t length);
 
-    FlashStatus writeIT(uint32_t targetAddress,
-                        const uint8_t* data,
-                        std::size_t length);
+    // Okuma ve Doğrulama
+    FlashStatus read(uint32_t sourceAddress, uint8_t* destination, std::size_t length) const override;
+    FlashStatus verify(uint32_t address, const uint8_t* expected, std::size_t length) const;
 
-    bool isBusy() const
-    {
-        return isBusy_;
-    }
-
-    uint32_t getLastError() const
-    {
-        return lastError_;
-    }
-
-    uint32_t getStartAddress() const
-    {
-        return startAddress_;
-    }
-
-    uint32_t getEndAddress() const
-    {
-        return endAddress_;
-    }
-
-    std::size_t getSize() const
-    {
-        return size_;
-    }
+    bool isBusy() const { return isBusy_; }
+    uint32_t getLastError() const { return lastError_; }
+    uint32_t getStartAddress() const { return startAddress_; }
+    uint32_t getEndAddress() const { return endAddress_; }
+    std::size_t getSize() const { return size_; }
 
     void onOperationComplete();
     void process();
@@ -91,21 +73,12 @@ private:
 
     alignas(32) uint8_t alignBuffer_[FlashWordSize];
 
+    FlashStatus programWordIT(uint32_t address, const uint8_t* data);
+    FlashStatus programWordBlocking(uint32_t address, const uint8_t* data);
 
-    FlashStatus programWord(uint32_t address,
-                            const uint8_t* data);
-
-    FlashStatus verify(uint32_t address,
-                       const uint8_t* expected,
-                       std::size_t length) const;
-
-    bool isErased(uint32_t address,
-                  std::size_t length) const;
-
+    bool isErased(uint32_t address, std::size_t length) const;
     bool isFlashWordAligned(uint32_t address) const;
-
-    bool isRangeValid(uint32_t address,
-                      std::size_t length) const;
+    bool isRangeValid(uint32_t address, std::size_t length) const;
 };
 
 extern FlashDriver g_flashDriver;
