@@ -1,17 +1,27 @@
 ../Flash/flash_driver.hpp:39:10:bool FlashDriver::isBusy() const	16	static
-../App/app_main.cpp:86:13:void updateUartDebugState()	8	static
-../App/app_main.cpp:99:13:void processUartPacket(const BinaryPacket&)	24	static
-../App/app_main.cpp:217:17:void app_init()	16	static
-../App/app_main.cpp:247:17:void app_loop()	120	static
-../App/app_main.cpp:316:1:void __static_initialization_and_destruction_0()	16	static
+../Uart/protocol_parser.hpp:37:10:bool ProtocolParser::pushByte(uint8_t)	24	static
+../Uart/protocol_parser.hpp:220:10:bool ProtocolParser::getPacket(BinaryPacket&)	16	static
+../Uart/protocol_parser.hpp:234:10:bool ProtocolParser::hasChecksumError() const	16	static
+../Uart/protocol_parser.hpp:239:10:void ProtocolParser::clearChecksumError()	16	static
+../Uart/protocol_parser.hpp:244:10:void ProtocolParser::reset()	16	static
+../Uart/protocol_parser.hpp:264:10:void ProtocolParser::resetWorkingState()	16	static
+../App/app_main.cpp:112:13:void clearApplicationData()	8	static
+../App/app_main.cpp:129:13:bool appendApplicationData(const uint8_t*, std::size_t)	24	static
+../App/app_main.cpp:184:13:bool readApplicationData(uint8_t*, std::size_t)	24	static
+../App/app_main.cpp:241:13:void updateDebugState()	8	static
+../App/app_main.cpp:272:13:void processProtocolPacket(const BinaryPacket&)	24	static
+../App/app_main.cpp:472:13:void processUartProtocol()	112	static
+../App/app_main.cpp:525:6:void app_init()	16	static
+../App/app_main.cpp:595:6:void app_loop()	16	static
+../App/app_main.cpp:660:1:void __static_initialization_and_destruction_0()	16	static
 ../Uart/iuart_driver.hpp:19:13:IUartDriver::~IUartDriver()	16	static
 ../Uart/iuart_driver.hpp:19:13:virtual IUartDriver::~IUartDriver()	16	static
-../Uart/uart_driver.hpp:17:5:UartDriver::~UartDriver()	16	static
-../Uart/uart_driver.hpp:17:5:virtual UartDriver::~UartDriver()	16	static
+../Uart/uart_driver.hpp:15:5:UartDriver::~UartDriver()	16	static
+../Uart/uart_driver.hpp:15:5:virtual UartDriver::~UartDriver()	16	static
 ../Flash/iflash_driver.hpp:10:13:IFlashDriver::~IFlashDriver()	16	static
 ../Flash/iflash_driver.hpp:10:13:virtual IFlashDriver::~IFlashDriver()	16	static
 ../Flash/flash_driver.hpp:20:5:FlashDriver::~FlashDriver()	16	static
 ../Flash/flash_driver.hpp:20:5:virtual FlashDriver::~FlashDriver()	16	static
-../App/app_main.cpp:316:1:void __static_initialization_and_destruction_1()	8	static
-../App/app_main.cpp:316:1:cpp)	8	static
-../App/app_main.cpp:316:1:cpp)	8	static
+../App/app_main.cpp:660:1:void __static_initialization_and_destruction_1()	8	static
+../App/app_main.cpp:660:1:cpp)	8	static
+../App/app_main.cpp:660:1:cpp)	8	static

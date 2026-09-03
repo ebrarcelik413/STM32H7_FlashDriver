@@ -29,8 +29,7 @@ Uart/uart_driver.o: ../Uart/uart_driver.cpp ../Uart/uart_driver.hpp \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr_ex.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
- ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
- ../Uart/protocol_parser.hpp
+ ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ../Uart/uart_driver.hpp:
 ../Uart/iuart_driver.hpp:
 ../Core/Inc/main.h:
@@ -64,4 +63,3 @@ Uart/uart_driver.o: ../Uart/uart_driver.cpp ../Uart/uart_driver.hpp \
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr_ex.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
-../Uart/protocol_parser.hpp:
