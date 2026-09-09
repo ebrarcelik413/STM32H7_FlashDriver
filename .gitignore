@@ -1,0 +1,15 @@
+# STM32CubeIDE build outputs
+**/Debug/
+**/Release/
+
+# STM32CubeIDE / Eclipse local settings
+**/.settings/
+
+# Build artifacts
+*.o
+*.d
+*.su
+*.cyclo
+*.elf
+*.map
+*.list
